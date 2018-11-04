@@ -3,6 +3,7 @@ University Project
 
 A Simple File System, implemented in C using the fuse library 
 Consists of two versions:
+
 Version 1 : persistence across different mounts 
 Version 2 : persistence in secondary storage
 
