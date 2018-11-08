@@ -169,62 +169,7 @@ int isDir(char *path){	// checks if path given is a directory
 	else 
 		return 0;
 	
-}/*
-int isDir(char *path){
-	//checks if it a valid directory or path
-	
-	printf("isDir - %s", path);
-	if (strcmp("/", path) == 0){
-		return 1;
-	}
-	else{
-		char *token = strtok(path, "/");
-		dirent *temp;
-		temp = root_directory;
-		int dir = -1;
-    	while (token != NULL){
-    		while(((strcmp(temp -> filename, "") != 0) || (temp -> file_inode) != 0)){
-				if((strcmp(temp -> filename, "") != 0)){
-					if((strcmp(temp -> filename, token) == 0)){
-						break;
-					}
-				}
-				temp ++;
-
-			}
-			if((strcmp(temp -> filename, "") == 0) && temp -> file_inode == 0){
-				printf("Invalid Path - %s\n", path);
-				return -1; // Invalid path	
-			}
-			else{
-        		inode *temp_ino = inodes + ((temp -> file_inode) * sizeof(inode));
-				if(temp_ino -> directory){
-					dir = 1;
-				}
-				else{
-					dir = 0;
-				}
-				if(dir == 1){// jump to next directory address 
-					temp = (dirent *)(datablks + ((temp_ino -> data) * BLK_SIZE));
-				}
-			}
-      token = strtok(NULL, "/");
-  	}
-		
-		if(dir == 0){
-			printf("%s - FILE\n", path);
-		}
-		else if(dir == 1){
-			printf("%s - DIRECTORY\n", path);
-		}
-		else{
-			printf("%s - ERROR PATH\n", path);
-		}
-  return dir;
-	}
 }
-*/
-
 void allocate_inode(char *path, int *ino, bool dir){ // initiliazes inode struct values 
 	
 	printf("ALLOCATING INODE\n");
@@ -292,11 +237,11 @@ static int fs_getattr(const char *path, struct stat *stbuf,struct fuse_file_info
   	else{
   		res = -ENOENT; // no suc file ordirecory error
   	}
-  	struct timespec t;
-  	clock_gettime(CLOCK_REALTIME, &t);
-  	stbuf->st_atim = t;
-  	stbuf->st_mtim = t;
-  	stbuf->st_ctim = t;
+  	
+  	
+  	stbuf->st_atim = ta;
+  	stbuf->st_mtim = tm;
+  	stbuf->st_ctim = tm;
 
   	stbuf->st_uid = getuid();
 	stbuf->st_gid = getgid();
@@ -306,6 +251,7 @@ static int fs_getattr(const char *path, struct stat *stbuf,struct fuse_file_info
 
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi){
 
+	clock_gettime(CLOCK_REALTIME, &ta);
   	printf("ReadDirectory called\n");
   
   	int ino;
@@ -336,6 +282,8 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
 }
 
 static int fs_mkdir(const char *path, mode_t mode){
+	clock_gettime(CLOCK_REALTIME, &ta);
+	clock_gettime(CLOCK_REALTIME, &tm);
 	printf("Make Directory called\n");
 
 	int ino = return_first_unused_inode(inode_bitmap);
@@ -375,8 +323,8 @@ static int fs_rmdir(const char *path){
 	/*
 	  remove a directory only if the directory is empty
 	 */
-
-	
+	clock_gettime(CLOCK_REALTIME, &ta);
+	clock_gettime(CLOCK_REALTIME, &tm);
 	printf("Remove directory\n");	
 
 	// Get the last directory
@@ -432,7 +380,8 @@ static int fs_rmdir(const char *path){
 
 static int fs_create(const char *path, mode_t mode,struct fuse_file_info *fi){
 	printf("Create called\n");
-
+	clock_gettime(CLOCK_REALTIME, &ta);
+	clock_gettime(CLOCK_REALTIME, &tm);
 	int ino = return_first_unused_inode(inode_bitmap);
 	allocate_inode(path, &ino, false);
 
@@ -466,6 +415,7 @@ static int fs_create(const char *path, mode_t mode,struct fuse_file_info *fi){
 }
 
 static int fs_open(const char *path, struct fuse_file_info *fi){
+	clock_gettime(CLOCK_REALTIME, &ta);
 	printf("Opening File\n");
 	int ino;
 	path_to_inode(path, &ino);
@@ -478,6 +428,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi){
 }
 
 static int fs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi){
+	clock_gettime(CLOCK_REALTIME, &ta);
 	printf("Read called\n");
 
 	int ino;
@@ -502,7 +453,8 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,struct
 }
 
 static int fs_write(const char *path, const char *buf, size_t size,off_t offset, struct fuse_file_info *fi){
-
+	clock_gettime(CLOCK_REALTIME, &ta);
+	clock_gettime(CLOCK_REALTIME, &tm);
 	printf("Write called\n");
 
 	int ino;
@@ -519,6 +471,8 @@ static int fs_write(const char *path, const char *buf, size_t size,off_t offset,
 }
 
 static int fs_rm(const char *path){
+	clock_gettime(CLOCK_REALTIME, &ta);
+	clock_gettime(CLOCK_REALTIME, &tm);
 	printf("remove/delete called\n");
 
 	int i = strlen(path);

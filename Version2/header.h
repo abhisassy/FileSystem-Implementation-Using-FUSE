@@ -15,6 +15,10 @@
 #include <sys/time.h>
 #include <time.h>
 
+//time stamps 
+struct timespec ta;
+struct timespec tm;
+
 // our file system implementation function prototype for FUSE
 
 static void *fs_init(struct fuse_conn_info *conn,struct fuse_config *cfg){
@@ -52,7 +56,7 @@ static struct fuse_operations fs_oper={
 //super block
 typedef struct{
     size_t blocks;
-    size_t iblocks;
+    size_t datablocks;
     size_t inodes;
 }sblock;
 

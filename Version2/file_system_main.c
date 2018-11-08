@@ -77,13 +77,13 @@ int main(int argc, char* argv[]){
 	printf("root_directory\t=\t %p\n", root_directory);
 	sleep(1);
 	if(buf.st_size == 0){
-		strcpy(root_directory -> filename, "RootFile");
+		strcpy(root_directory -> filename, "Help");
 		root_directory -> file_inode = return_first_unused_inode(inode_bitmap);
 
 		inode *temp;
 		temp = inodes + ((root_directory -> file_inode) * sizeof(inode));
 		temp -> id = 1;
-		temp -> size = 30;
+		temp -> size = 300;
 		temp -> data = return_offset_of_first_free_datablock(data_bitmap);
 		temp -> directory = false;
 		t = time(0);
@@ -93,6 +93,16 @@ int main(int argc, char* argv[]){
 		
 		char *data_temp = (datablks + ((temp -> data)*BLK_SIZE));
 		strcpy(data_temp, "Welcome To Our File System!!!\n");
+		strcat(data_temp, "Here are some commands you can run :\n");
+		strcat(data_temp, "ls , ls -a, ls -l \n");
+		strcat(data_temp, "cd <file/folder>, cd . , cd ..\n");
+		strcat(data_temp, "echo <string>  >> <filename>\n");
+		strcat(data_temp, "cat <filename>\n");
+		strcat(data_temp, "touch <filename>\n");
+		strcat(data_temp, "mkdir <folder name>\n");
+		strcat(data_temp, "rmdir <folder name>\n");
+		strcat(data_temp, "rm <filename>\n");
+		strcat(data_temp, "stat <file/folder>\n");
 		// write the filesystem data onto ext file for persistence 
 		write(fs_file, fs, FS_SIZE); 
 	}
