@@ -17,7 +17,6 @@ gcc -D_FILE_OFFSET_BITS=64 file_system_main.c `pkg-config fuse --cflags --libs` 
 int main(int argc, char* argv[]){
 
 	printf("\033[1;34m");
-	time_t t; 
 	
 	fs_file = open("MyFileSystem",O_RDWR | O_CREAT,0700); //stored values in ext file
 	if(fs_file < 0){
@@ -51,7 +50,7 @@ int main(int argc, char* argv[]){
 	superblk     = (sblock *)fs;
 	inode_bitmap = (int *)(superblk + SBLK_SIZE); 
 	inodes 	  	 = (inode *)(inode_bitmap + INODE_BITMAP_BLKS * BLK_SIZE);
-	data_bitmap  = (int *)(inodes + N_INODES * sizeof(inode));
+	data_bitmap  = (int *)(inodes + INODE_BLKS * BLK_SIZE);
 	datablks   	 = (char *)(data_bitmap + DATA_BITMAP_BLKS * BLK_SIZE);
 	
 	printf("\n\tBLOCK LOCATIONS\n");
@@ -86,9 +85,11 @@ int main(int argc, char* argv[]){
 		temp -> size = 300;
 		temp -> data = return_offset_of_first_free_datablock(data_bitmap);
 		temp -> directory = false;
-		t = time(0);
-		temp -> last_accessed = localtime(&t);
-		temp -> last_modified = localtime(&t);
+		
+		clock_gettime(CLOCK_REALTIME, &(temp -> ta));
+		clock_gettime(CLOCK_REALTIME, &(temp -> tm));
+		clock_gettime(CLOCK_REALTIME, &(temp -> tc));
+
 		temp -> link_count = 1;
 		
 		char *data_temp = (datablks + ((temp -> data)*BLK_SIZE));
@@ -105,6 +106,7 @@ int main(int argc, char* argv[]){
 		strcat(data_temp, "stat <file/folder>\n");
 		// write the filesystem data onto ext file for persistence 
 		write(fs_file, fs, FS_SIZE); 
+		printf("Help File Created\n");
 	}
 	else{
 		printf("\n");

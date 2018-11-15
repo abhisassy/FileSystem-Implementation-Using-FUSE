@@ -128,6 +128,7 @@ void path_to_inode(const char* path, int *ino){  //stores inode offset in ino
 			token = strtok(NULL, "/");
 		}
 	}
+	printf("OUT\n");
 }
 
 int find_link_count(char* path){ // returns no of files in direcotry
@@ -174,13 +175,14 @@ void allocate_inode(char *path, int *ino, bool dir){ // initiliazes inode struct
 	
 	printf("ALLOCATING INODE\n");
 	
-  	inode *temp_ino = inodes + ((*ino) * sizeof(inode));
-	temp_ino -> id = ino;
-	temp_ino -> size = 0;
-	temp_ino -> data = return_offset_of_first_free_datablock(data_bitmap);
+  	inode *temp_ino 	  = inodes + ((*ino) * sizeof(inode));
+	temp_ino -> id 		  = ino;
+	temp_ino -> size      = 0;
+	temp_ino -> data 	  = return_offset_of_first_free_datablock(data_bitmap);
 	temp_ino -> directory = dir;
-	temp_ino -> last_accessed = 0;
-	temp_ino -> last_modified = 0;
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tm));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tc));
 	if(dir){
 		temp_ino -> link_count = 2;
 	}
@@ -195,8 +197,9 @@ void print_inode(inode *i){ // prints inode struct values for a given file
 	printf("size : %d\n", i -> size);
 	printf("data : %u\n", i -> data);
 	printf("directory : %d\n", i -> directory);
-	printf("last_accessed : %d\n", i -> last_accessed);
-	printf("last_modified : %d\n", i -> last_modified);
+	printf("last_accessed : %d\n", i -> ta);
+	printf("last_modified : %d\n", i -> tm);
+	printf("last_status_change : %d\n", i -> tc);
 	printf("link_count : %d\n", i -> link_count);
 }
 
@@ -208,7 +211,8 @@ void print_inode(inode *i){ // prints inode struct values for a given file
 
 static int fs_getattr(const char *path, struct stat *stbuf,struct fuse_file_info *fi){
 
-  	printf("Get Attribute called\n");
+  	printf("\nGet Attribute called\n");
+  	printf("%s\n",path );
 
   	int res = 0;
   	char *path2;
@@ -222,26 +226,28 @@ static int fs_getattr(const char *path, struct stat *stbuf,struct fuse_file_info
   	stbuf->st_blksize = 4112;
   	stbuf->st_blocks  = 1;
 
+  	inode *temp_ino = inodes + (ino * sizeof(inode));
+
   	int directory_flag = isDir(path2);
   	if (directory_flag > 0) {
 
-  		stbuf->st_mode = S_IFDIR | 0777;
-  		stbuf->st_nlink = find_link_count(path2);
+  		stbuf->st_mode  = S_IFDIR | 0777;
+  		stbuf->st_nlink = temp_ino -> link_count;
   	}
   	else if (directory_flag == 0){
-      	inode *temp_ino = inodes + (ino * sizeof(inode));
-  		stbuf->st_mode = S_IFREG | 0777;
+      	
+  		stbuf->st_mode  = S_IFREG | 0777;
   		stbuf->st_nlink = 1;
-  		stbuf->st_size = temp_ino -> size;
+  		stbuf->st_size  = temp_ino -> size;
   	}
   	else{
   		res = -ENOENT; // no suc file ordirecory error
   	}
   	
   	
-  	stbuf->st_atim = ta;
-  	stbuf->st_mtim = tm;
-  	stbuf->st_ctim = tm;
+  	stbuf->st_atim = temp_ino -> ta;
+  	stbuf->st_mtim = temp_ino -> tm;
+  	stbuf->st_ctim = temp_ino -> tm;
 
   	stbuf->st_uid = getuid();
 	stbuf->st_gid = getgid();
@@ -251,8 +257,8 @@ static int fs_getattr(const char *path, struct stat *stbuf,struct fuse_file_info
 
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t offset, struct fuse_file_info *fi){
 
-	clock_gettime(CLOCK_REALTIME, &ta);
-  	printf("ReadDirectory called\n");
+	
+  	printf("\nReadDirectory called\n");
   
   	int ino;
   	path_to_inode(path, &ino);
@@ -264,32 +270,44 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
   		dirent *temp;
   		filler(buf, ".", NULL, 0);
   		filler(buf, "..", NULL, 0);
-  		
+
+  		inode *temp_ino = inodes + (ino * sizeof(inode));
+
+  		clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
 
   		if(strcmp(path, "/") == 0){
   			temp = root_directory;
   		}
   		else{
-        	inode *temp_ino = inodes + (ino * sizeof(inode));
   			temp = (dirent *)(datablks + ((temp_ino -> data) * BLK_SIZE));
   		}
   		while((strcmp(temp -> filename, "") != 0)){
-  			filler(buf, temp -> filename, NULL, 0);
-  			temp++;
+  			if(strcmp(temp -> filename ,"$") == 0)
+  				temp++;
+  			else
+  			{
+  				printf("%s\n",temp -> filename );
+  				filler(buf, temp -> filename, NULL, 0);
+  				temp++;
+  			}
+
   		}
   	}
   	return 0;
 }
 
 static int fs_mkdir(const char *path, mode_t mode){
-	clock_gettime(CLOCK_REALTIME, &ta);
-	clock_gettime(CLOCK_REALTIME, &tm);
-	printf("Make Directory called\n");
+	
+	printf("\nMake Directory called\n");
 
 	int ino = return_first_unused_inode(inode_bitmap);
 	
 	allocate_inode(path, &ino, true);
 	inode *temp_ino = inodes + (ino * sizeof(inodes));
+
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tm));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tc));
 
 	char *token = strtok(path, "/");
 	dirent *temp;
@@ -300,9 +318,10 @@ static int fs_mkdir(const char *path, mode_t mode){
 		}
 		if((strcmp(temp -> filename, "") == 0)){
 			temp = (dirent *)temp;
+			printf("%s\n",token );
 			strcpy((temp -> filename), token);
 			temp -> file_inode = ino;
-			temp_ino->link_count++;
+			temp_ino -> link_count = temp_ino -> link_count + 1;
 
     		printf("\n\nPersisting the directory creation\n\n");
     		lseek(fs_file, 0, SEEK_SET);
@@ -317,15 +336,15 @@ static int fs_mkdir(const char *path, mode_t mode){
 		}
 		token = strtok(NULL, "/");
 	}
+	return -1;
 }
 
 static int fs_rmdir(const char *path){
 	/*
 	  remove a directory only if the directory is empty
 	 */
-	clock_gettime(CLOCK_REALTIME, &ta);
-	clock_gettime(CLOCK_REALTIME, &tm);
-	printf("Remove directory\n");	
+	
+	printf("\nRemove directory\n");	
 
 	// Get the last directory
 	int i = strlen(path);
@@ -342,13 +361,22 @@ static int fs_rmdir(const char *path){
 	dirent *temp;
 	dirent *temp_data;
 	inode *temp_ino;
+
+	path_to_inode(subpath, &ino);
+
+	temp_ino = inodes + (ino * sizeof(inode));
+
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tm));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tc));
+
+	temp_ino -> link_count = temp_ino -> link_count - 1;
+
+
 	if(strcmp(subpath, "/") == 0){
 	temp = root_directory;
 	}
 	else{
-	path_to_inode(subpath, &ino);
-
-	temp_ino = inodes + (ino * sizeof(inode));
 
 	temp = datablks + ((temp_ino->data) * BLK_SIZE);
 	}
@@ -361,14 +389,13 @@ static int fs_rmdir(const char *path){
 		if(temp -> file_inode != 0){
 			temp_ino = inodes + ((temp -> file_inode) * sizeof(inode));
 			temp_data = ((dirent *)(datablks + ((temp_ino -> data) * BLK_SIZE)));
-			if(strcmp((temp_data -> filename), "") != 0){
+			if(strcmp((temp_data -> filename), "") != 0 && strcmp((temp_data -> filename), "$") != 0){
 		
 				return -1;
 			}
-			strcpy(temp ->filename, "");
+			strcpy(temp ->filename, "$");
 			data_bitmap[(temp_ino -> data)] = 1;
 			inode_bitmap[(temp -> file_inode)] = 0;
-			temp_ino->link_count--;
 		}
 	}
 	printf("\n\nPersisting the directory deletion\n\n");
@@ -379,9 +406,8 @@ static int fs_rmdir(const char *path){
 
 
 static int fs_create(const char *path, mode_t mode,struct fuse_file_info *fi){
-	printf("Create called\n");
-	clock_gettime(CLOCK_REALTIME, &ta);
-	clock_gettime(CLOCK_REALTIME, &tm);
+	printf("\nCreate called\n");
+	
 	int ino = return_first_unused_inode(inode_bitmap);
 	allocate_inode(path, &ino, false);
 
@@ -415,21 +441,25 @@ static int fs_create(const char *path, mode_t mode,struct fuse_file_info *fi){
 }
 
 static int fs_open(const char *path, struct fuse_file_info *fi){
-	clock_gettime(CLOCK_REALTIME, &ta);
-	printf("Opening File\n");
+	
+	printf("\nOpening File\n");
 	int ino;
 	path_to_inode(path, &ino);
 
 	if(ino == -1){
 		return -1;
 	}
+
+	inode *temp_ino = inodes + (ino * sizeof(inode));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+
 	printf("Successful open\n");
 	return 0;
 }
 
 static int fs_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi){
-	clock_gettime(CLOCK_REALTIME, &ta);
-	printf("Read called\n");
+	
+	printf("\nRead called\n");
 
 	int ino;
 	path_to_inode(path, &ino);
@@ -439,6 +469,9 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,struct
 		return -ENOENT;
 
 	inode *temp_ino = (inodes + (ino * sizeof(inode)));
+
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+
 	len = temp_ino->size;
 	if (offset < len) {
 		if (offset + size > len)
@@ -453,27 +486,33 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,struct
 }
 
 static int fs_write(const char *path, const char *buf, size_t size,off_t offset, struct fuse_file_info *fi){
-	clock_gettime(CLOCK_REALTIME, &ta);
-	clock_gettime(CLOCK_REALTIME, &tm);
-	printf("Write called\n");
+	
+	printf("\nWrite called\n");
 
 	int ino;
 	path_to_inode(path, &ino);
+	printf("out of path to inode \n");
 	inode *temp_ino = inodes + (ino * sizeof(inode));
+
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tm));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tc));
+
+
 	memcpy(((datablks + ((temp_ino -> data) * BLK_SIZE)) + offset), (buf), size);
 	temp_ino -> size = (temp_ino -> size) +  size;
 
 	printf("\n\nPersisting the write\n\n");
 	lseek(fs_file, 0, SEEK_SET);
 	printf("%d\n", write(fs_file, fs, FS_SIZE));
-	return 0;
+	
+	return size;
 
 }
 
 static int fs_rm(const char *path){
-	clock_gettime(CLOCK_REALTIME, &ta);
-	clock_gettime(CLOCK_REALTIME, &tm);
-	printf("remove/delete called\n");
+	
+	printf("\nremove/delete called\n");
 
 	int i = strlen(path);
 	while(path[i] != '/'){
@@ -489,15 +528,20 @@ static int fs_rm(const char *path){
 	int ino;
 	dirent *temp;
 	dirent *temp_data;
-	inode *temp_ino;
+	inode  *temp_ino;
+
+	path_to_inode(subpath, &ino);
+	temp_ino = inodes + (ino * sizeof(inode));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tm));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tc));
+
+
 	if(strcmp(subpath, "/") == 0){
   		temp = root_directory;
 	}	
 	else{
-  		path_to_inode(subpath, &ino);
-
-  		temp_ino = inodes + (ino * sizeof(inode));
-
+  		
 		temp = datablks + ((temp_ino->data) * BLK_SIZE);
 	}
 
@@ -510,7 +554,7 @@ static int fs_rm(const char *path){
 		if(temp -> file_inode != 0){
     	temp_ino = inodes + ((temp -> file_inode) * sizeof(inode));
     	temp_data = ((dirent *)(datablks + ((temp_ino -> data) * BLK_SIZE)));
-		strcpy(temp ->filename, "");
+		strcpy(temp ->filename, "$");
 		
 		inode_bitmap[(temp -> file_inode)] = 0;
 		}

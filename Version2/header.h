@@ -15,9 +15,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-//time stamps 
-struct timespec ta;
-struct timespec tm;
 
 // our file system implementation function prototype for FUSE
 
@@ -67,9 +64,11 @@ typedef struct {
 	size_t size;				// Size of the file
 	int data;					// offset of data block
 	bool directory;				// true if its a directory else false
-	int last_accessed;			// Last accessed time
-	int last_modified;			// Last modified time
 	int link_count; 			// 2 in case its a directory, 1 if its a file
+	struct timespec ta;			// Last accessed time
+	struct timespec tm;			// Last modified time
+	struct timespec tc;			// Last change of state time
+
 }inode;
 
 //directory
@@ -80,7 +79,7 @@ typedef struct{
 
 /*
 	size of dirent = 12+4 =16bytes ;  4kb block :: hence 256 directory entries
-	sizeof inode = 40bytes :: hence 4kb/40b = 102 files max 
+	sizeof inode = 66bytes :: hence 4kb/66b = 62 files max 
 */
 
 // block size specifications
@@ -88,7 +87,7 @@ typedef struct{
 #define SBLK_SIZE 		  24	//super block size
 #define BLK_SIZE 		  4096  //4KB data blocks
 
-#define N_INODES 		  100	//100 files limit  
+#define N_INODES 		  60	//62 files limit  
 #define DBLKS_PER_INODE   1		//each file gets one data block
 #define DBLKS 			  100 	//100 data blocks available	
 
