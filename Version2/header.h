@@ -8,9 +8,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <unistd.h> //for posix os api related functions 
-#include <fcntl.h>	//for file discriptor related functions
-#include <sys/stat.h> //file stats 		
+#include <unistd.h> 	//for posix os api related functions 
+#include <fcntl.h>		//for file discriptor related functions
+#include <sys/stat.h> 	//file stats 		
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
@@ -32,10 +32,11 @@ static int fs_open(const char *path, struct fuse_file_info *fi);
 static int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
 static int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
 static int fs_rm(const char *path);
+static int fs_truncate (const char *path, off_t length, struct fuse_file_info *fi);
 
 
 
-static struct fuse_operations fs_oper={
+static struct fuse_operations user_defined_func={
 	.init       = fs_init,
 	.getattr    = fs_getattr,
 	.readdir	= fs_readdir,
@@ -46,15 +47,20 @@ static struct fuse_operations fs_oper={
 	.read       = fs_read,
 	.write      = fs_write,
 	.unlink		= fs_rm,
+	.truncate	= fs_truncate,
 };
 
 // our user defined file system data structures
 
 //super block
 typedef struct{
-    size_t blocks;
-    size_t datablocks;
-    size_t inodes;
+    
+    size_t  filesystem_capacity;
+    char 	filesystem_name[30];
+    int 	no_of_blocks;
+    int 	no_of_inodes;
+    int 	no_of_datablocks;
+    
 }sblock;
 
 //inode block
@@ -62,6 +68,7 @@ typedef struct {
 	bool used;                  // valid inode or not
 	int id;						// ID for the inode
 	size_t size;				// Size of the file
+	int nblocks;				// number 512 byte blocks used 
 	int data;					// offset of data block
 	bool directory;				// true if its a directory else false
 	int link_count; 			// 2 in case its a directory, 1 if its a file
@@ -78,13 +85,13 @@ typedef struct{
 }dirent;
 
 /*
-	size of dirent = 12+4 =16bytes ;  4kb block :: hence 256 directory entries
+	size of dirent = 12+4 =16bytes ;  4kb block :: hence around 200 directory entries
 	sizeof inode = 66bytes :: hence 4kb/66b = 62 files max 
 */
 
 // block size specifications
 
-#define SBLK_SIZE 		  24	//super block size
+#define SBLK_SIZE 		  50	//super block size
 #define BLK_SIZE 		  4096  //4KB data blocks
 
 #define N_INODES 		  60	//62 files limit  

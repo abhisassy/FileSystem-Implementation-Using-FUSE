@@ -212,7 +212,7 @@ void print_inode(inode *i){ // prints inode struct values for a given file
 static int fs_getattr(const char *path, struct stat *stbuf,struct fuse_file_info *fi){
 
   	printf("\nGet Attribute called\n");
-  	printf("%s\n",path );
+  	printf("--- %s\n",path );
 
   	int res = 0;
   	char *path2;
@@ -222,21 +222,24 @@ static int fs_getattr(const char *path, struct stat *stbuf,struct fuse_file_info
 
   	int ino;
   	path_to_inode(path, &ino);
-  	stbuf->st_ino = ino;
-  	stbuf->st_blksize = 4112;
-  	stbuf->st_blocks  = 1;
-
   	inode *temp_ino = inodes + (ino * sizeof(inode));
+
+  	stbuf->st_ino = ino;
+  	stbuf->st_blksize = 4096;
+  	stbuf->st_blocks  = temp_ino -> nblocks;
+
+  	
 
   	int directory_flag = isDir(path2);
   	if (directory_flag > 0) {
 
-  		stbuf->st_mode  = S_IFDIR | 0777;
+  		stbuf->st_mode  = S_IFDIR | 0770;
   		stbuf->st_nlink = temp_ino -> link_count;
+  		stbuf->st_size  = temp_ino -> size; 
   	}
   	else if (directory_flag == 0){
       	
-  		stbuf->st_mode  = S_IFREG | 0777;
+  		stbuf->st_mode  = S_IFREG | 0770;
   		stbuf->st_nlink = 1;
   		stbuf->st_size  = temp_ino -> size;
   	}
@@ -272,6 +275,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
   		filler(buf, "..", NULL, 0);
 
   		inode *temp_ino = inodes + (ino * sizeof(inode));
+  		temp_ino -> size = 0;
 
   		clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
 
@@ -285,7 +289,10 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,off_t 
   			if(strcmp(temp -> filename ,"$") == 0)
   				temp++;
   			else
-  			{
+  			{	
+  				inode *tempvar = inodes + (temp -> file_inode * sizeof(inode));
+  				temp_ino -> size = temp_ino -> size + tempvar -> size;
+  				printf("%d\t %d\n",tempvar -> size , temp_ino ->size );
   				printf("%s\n",temp -> filename );
   				filler(buf, temp -> filename, NULL, 0);
   				temp++;
@@ -319,6 +326,8 @@ static int fs_mkdir(const char *path, mode_t mode){
 		if((strcmp(temp -> filename, "") == 0)){
 			temp = (dirent *)temp;
 			printf("%s\n",token );
+			if(strcmp(token,"$") == 0)
+				return -1;
 			strcpy((temp -> filename), token);
 			temp -> file_inode = ino;
 			temp_ino -> link_count = temp_ino -> link_count + 1;
@@ -408,6 +417,7 @@ static int fs_rmdir(const char *path){
 static int fs_create(const char *path, mode_t mode,struct fuse_file_info *fi){
 	printf("\nCreate called\n");
 	
+
 	int ino = return_first_unused_inode(inode_bitmap);
 	allocate_inode(path, &ino, false);
 
@@ -491,6 +501,7 @@ static int fs_write(const char *path, const char *buf, size_t size,off_t offset,
 
 	int ino;
 	path_to_inode(path, &ino);
+
 	printf("out of path to inode \n");
 	inode *temp_ino = inodes + (ino * sizeof(inode));
 
@@ -498,9 +509,18 @@ static int fs_write(const char *path, const char *buf, size_t size,off_t offset,
 	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tm));
 	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tc));
 
+	if(temp_ino -> size + size > BLK_SIZE)
+		return -1;
 
 	memcpy(((datablks + ((temp_ino -> data) * BLK_SIZE)) + offset), (buf), size);
 	temp_ino -> size = (temp_ino -> size) +  size;
+	
+	
+	if(temp_ino -> size / 512 + 1 > temp_ino -> nblocks)
+		temp_ino -> nblocks = temp_ino -> size / 512 + 1;
+	else if(temp_ino -> size ==0 )
+		temp_ino -> nblocks = 1;
+	
 
 	printf("\n\nPersisting the write\n\n");
 	lseek(fs_file, 0, SEEK_SET);
@@ -552,8 +572,7 @@ static int fs_rm(const char *path){
 	if((strcmp(temp -> filename, "") != 0)){
   		
 		if(temp -> file_inode != 0){
-    	temp_ino = inodes + ((temp -> file_inode) * sizeof(inode));
-    	temp_data = ((dirent *)(datablks + ((temp_ino -> data) * BLK_SIZE)));
+    	
 		strcpy(temp ->filename, "$");
 		
 		inode_bitmap[(temp -> file_inode)] = 0;
@@ -563,4 +582,26 @@ static int fs_rm(const char *path){
 	lseek(fs_file, 0, SEEK_SET);
 	write(fs_file, fs, FS_SIZE);
 	return 0;
+}
+
+static int fs_truncate (const char *path, off_t length, struct fuse_file_info *fi){
+	printf("TRUNC CALLED\n");
+	int ino;
+	path_to_inode(path, &ino);
+	
+	inode *temp_ino = inodes + (ino * sizeof(inode));
+
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> ta));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tm));
+	clock_gettime(CLOCK_REALTIME, &(temp_ino -> tc));
+
+	if(temp_ino -> size > length){
+		printf("\t\t\t\t\t>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+		memset((datablks + ((temp_ino -> data) * BLK_SIZE)) + length, "\0", temp_ino -> size - length);
+		temp_ino -> size = length;
+	}
+	
+	return 0;
+
+
 }
